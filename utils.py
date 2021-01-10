@@ -38,8 +38,9 @@ def eeg_preprocess(raw, channels_list = None, plot_flag = False):
         filt_raw.pick(channels_list)
     #num_channels = filt_raw.info['nchan']
     filt_raw.load_data()
-    filt_raw.filter(0.1,45, phase="zero-double", method = "iir", iir_params= dict(order=4, ftype='cheby1', rp=0.5))
-    filt_raw.notch_filter(np.arange(60, 241, 60))
+    #filt_raw.filter(0.1,45, phase="zero-double", method = "iir", iir_params= dict(order=4, ftype='cheby1', rp=0.5), verbose=False)
+    filt_raw.filter(0.1,45, verbose=False) 
+    filt_raw.notch_filter(np.arange(60, 241, 60), verbose=False)
     filt_csd = mne.preprocessing.compute_current_source_density(filt_raw)
     if plot_flag ==True:
         filt_csd.plot(duration=2, n_channels=20, remove_dc=False);
@@ -56,16 +57,18 @@ def get_events_sequence(seq_events_sect, num_sect, time_events ):
 
     return array_events
 
-def get_sensor_positions(info):
-    dig= info['dig']
-    array_pos=None
-    for k in dig:
-        values = list(k.values())
-        if array_pos is not None:
-            array_pos = np.concatenate([array_pos,values[1][0:2].reshape([1,values[1].shape[0]-1])], axis=0)
-        else:
-            array_pos = values[1][0:2].reshape([1,values[1].shape[0]-1])
-    return array_pos
+# def get_sensor_positions(montage):
+#     pos = montage.get_positions()
+    # return pos
+    # dig= info['dig']
+    # array_pos=None
+    # for k in dig:
+    #     values = list(k.values())
+    #     if array_pos is not None:
+    #         array_pos = np.concatenate([array_pos,values[1][0:2].reshape([1,values[1].shape[0]-1])], axis=0)
+    #     else:
+    #         array_pos = values[1][0:2].reshape([1,values[1].shape[0]-1])
+    # return array_pos
 
 def smooth_signal(erds, fs, new_freq, time_vec, plot=False):
     window_len = np.int((1/new_freq)*fs)
@@ -89,7 +92,14 @@ def extract_erds_signal(signal, time_vec, ref, fs, new_freq):
     # extract erds. Signal must be previously filtered in the desired band
     power_signal = np.power(signal,2)
     smooth_power_signal, smooth_time = smooth_signal(power_signal, fs, new_freq, time_vec, plot=False)
-    erds = (smooth_power_signal - ref)/ref
+    smooth_array = None
+    for ch in range(signal.shape[0]):
+        smooth_power, smooth_time = smooth_signal(signal[ch,:].reshape([1,signal.shape[-1]]), fs, new_freq, time_vec, plot=False)
+        if smooth_array is not None:
+            smooth_array = np.concatenate([smooth_array, smooth_power.reshape([1, smooth_power.shape[0]])], axis = 0)
+        else: smooth_array = smooth_power.reshape([1, smooth_power.shape[0]])
+    ref = ref.reshape([ref.shape[0],1])
+    erds = (smooth_array - ref)/ref
     return erds
 
 def extract_erds_epochs(epochs, time_vec, ref, fs, new_freq, lims_time_event):
@@ -102,30 +112,42 @@ def extract_erds_epochs(epochs, time_vec, ref, fs, new_freq, lims_time_event):
         if smooth_array is not None:
             smooth_array = np.concatenate([smooth_array, smooth_power.reshape([1, smooth_power.shape[0]])], axis = 0)
         else: smooth_array = smooth_power.reshape([1, smooth_power.shape[0]])
-    ref = ref.reshape([ref.shape[0],1])
-    erds = (smooth_array - ref)/ref
     smooth_ind_0 = np.where(np.abs(smooth_time-lims_time_event[0])<1e-5)[0][0]
     smooth_ind_1 = np.where(np.abs(smooth_time-lims_time_event[1])<1e-5)[0][0]
     ind_intv = np.array([smooth_ind_0,smooth_ind_1])
-    erds = erds[:,ind_intv[0]:ind_intv[1]]
+    smooth_array = smooth_array[:,ind_intv[0]:ind_intv[1]]    
+    ref = ref.reshape([ref.shape[0],1])
+    erds = (smooth_array - ref)/ref
     return erds
 
 
-def extract_ref(epochs, time_ind):
+def extract_ref(epochs, time_ind, time_vec, fs, new_freq):
     epochs_event_data = np.power(epochs.get_data(),2)
     epochs_mean = epochs_event_data.mean(axis=0)
     ref = epochs_mean[:,time_ind[0]:time_ind[1]].mean(axis=1)
+    # # acrescentado smooth na referencia
+    # smooth_array = None
+    # for ch in range(epochs_mean.shape[0]):
+    #     smooth_power, smooth_time = smooth_signal(ref[ch,:].reshape([1,ref.shape[-1]]), fs, new_freq, time_vec, plot=False)
+    #     if smooth_array is not None:
+    #         smooth_array = np.concatenate([smooth_array, smooth_power.reshape([1, smooth_power.shape[0]])], axis = 0)
+    #     else: smooth_array = smooth_power.reshape([1, smooth_power.shape[0]])
+    # ref = smooth_array.mean(axis=1)
     return ref
 
 
-def plot_erds_topomap(erds_events, y,  array_pos, band, events_dict, vmin, vmax):
+def plot_erds_topomap(erds_events, y,  info, band, events_dict, vmin, vmax, ch_names):
     fig, axs = plt.subplots(ncols=4, nrows = 1, figsize=(6, 2), gridspec_kw=dict(top=0.9),
                        sharex=True, sharey=True)
     for event_name, event_id in events_dict.items():
-        ind_obs_event = np.where(y==event_id)[0]
-        erds_event =  erds_events[:, ind_obs_event]
-        array_plot = erds_event.mean(axis=1) #pega a média no tempo
-        im,cn = plt_topomap(array_plot, pos=array_pos[3:,:], axes = axs[event_id], show = False, vmin = vmin, vmax = vmax);
-        time_txt = "{}-{}s".format(8, 36)
-        axs[event_id].set_title("{} {}".format(band, time_txt), fontsize=6)
-    
+        #if event_name!="neutro":
+            ind_obs_event = np.where(y==event_id)[0]
+            erds_event =  erds_events[:, ind_obs_event]
+            array_plot = erds_event.mean(axis=1) #pega a média no tempo
+            im,cn = plt_topomap(array_plot, pos=info, axes = axs[event_id], show = False, vmin = vmin, vmax = vmax, show_names = True, names = ch_names);
+            time_txt = "{}-{}s".format(8, 36)
+            axs[event_id].set_title("{} {}".format(event_name, band), fontsize=10)
+    #axs.set_title("{}".format(band))
+    cbar = plt.colorbar(im)  
+    cbar.ax.tick_params(labelsize=6)
+    axs[3].axis('off')
