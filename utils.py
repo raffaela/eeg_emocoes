@@ -16,6 +16,7 @@ from mne.viz.utils import center_cmap
 from mne.viz import plot_topomap as plt_topomap
 import pandas as pd
 import os
+from scipy import stats
 
 def read_eeginfo(eeg_filepath, marc_filepath, verbose = False):
     # read eeg signals file
@@ -36,9 +37,7 @@ def eeg_preprocess(raw, channels_list = None, plot_flag = False):
     channels_list = raw.info['ch_names']
     if channels_list is not None:
         filt_raw.pick(channels_list)
-    #num_channels = filt_raw.info['nchan']
     filt_raw.load_data()
-    #filt_raw.filter(0.1,45, phase="zero-double", method = "iir", iir_params= dict(order=4, ftype='cheby1', rp=0.5), verbose=False)
     filt_raw.filter(0.1,45, verbose=False) 
     filt_raw.notch_filter(np.arange(60, 241, 60), verbose=False)
     filt_csd = mne.preprocessing.compute_current_source_density(filt_raw)
@@ -54,21 +53,9 @@ def get_events_sequence(seq_events_sect, num_sect, time_events ):
     zero_column = np.zeros([len(seq_events),1],dtype='int32')
     array_events = np.concatenate([time_events[1:],zero_column], axis=1)
     array_events = np.concatenate([array_events,seq_events],axis=1)
-
+    ind_crop = np.arange(8,72,9)
+    array_events = np.delete(array_events, ind_crop, axis=0)
     return array_events
-
-# def get_sensor_positions(montage):
-#     pos = montage.get_positions()
-    # return pos
-    # dig= info['dig']
-    # array_pos=None
-    # for k in dig:
-    #     values = list(k.values())
-    #     if array_pos is not None:
-    #         array_pos = np.concatenate([array_pos,values[1][0:2].reshape([1,values[1].shape[0]-1])], axis=0)
-    #     else:
-    #         array_pos = values[1][0:2].reshape([1,values[1].shape[0]-1])
-    # return array_pos
 
 def smooth_signal(erds, fs, new_freq, time_vec, plot=False):
     window_len = np.int((1/new_freq)*fs)
@@ -121,18 +108,31 @@ def extract_erds_epochs(epochs, time_vec, ref, fs, new_freq, lims_time_event):
     return erds
 
 
-def extract_ref(epochs, time_ind, time_vec, fs, new_freq):
+def extract_ref(epochs, time_vec, lims_time_event, fs, new_freq):
     epochs_event_data = np.power(epochs.get_data(),2)
     epochs_mean = epochs_event_data.mean(axis=0)
-    ref = epochs_mean[:,time_ind[0]:time_ind[1]].mean(axis=1)
-    # # acrescentado smooth na referencia
-    # smooth_array = None
-    # for ch in range(epochs_mean.shape[0]):
-    #     smooth_power, smooth_time = smooth_signal(ref[ch,:].reshape([1,ref.shape[-1]]), fs, new_freq, time_vec, plot=False)
-    #     if smooth_array is not None:
-    #         smooth_array = np.concatenate([smooth_array, smooth_power.reshape([1, smooth_power.shape[0]])], axis = 0)
-    #     else: smooth_array = smooth_power.reshape([1, smooth_power.shape[0]])
-    # ref = smooth_array.mean(axis=1)
+    #ref = epochs_mean[:,time_ind[0]:time_ind[1]].mean(axis=1)
+    # acrescentado smooth na referencia
+    smooth_array = None
+    for ch in range(epochs_mean.shape[0]):
+        smooth_power, smooth_time = smooth_signal(epochs_mean[ch,:].reshape([1,epochs_mean.shape[-1]]), fs, new_freq, time_vec, plot=False)
+        if smooth_array is not None:
+            smooth_array = np.concatenate([smooth_array, smooth_power.reshape([1, smooth_power.shape[0]])], axis = 0)
+        else: smooth_array = smooth_power.reshape([1, smooth_power.shape[0]])
+        smooth_ind_0 = np.where(np.abs(smooth_time-lims_time_event[0])<1e-5)[0][0]
+    smooth_ind_1 = np.where(np.abs(smooth_time-lims_time_event[1])<1e-5)[0][0]
+    ind_intv = np.array([smooth_ind_0,smooth_ind_1])
+    smooth_array = smooth_array[:,ind_intv[0]:ind_intv[1]]  
+    # remove outliers
+    ref = np.array([])
+    for ch in range(epochs_mean.shape[0]):
+        ref_ch = smooth_array[ch,:]
+        z_score = stats.zscore(smooth_array[ch,:])
+        ind_outlier = np.where(np.abs(z_score)>3)[0]
+        if ind_outlier.size!=0:
+            ref_ch = np.delete(ref_ch,ind_outlier).mean()
+        ref = np.concatenate([ref,np.array([ref_ch.mean()])])
+    #ref = smooth_array.mean(axis=1)
     return ref
 
 
@@ -147,7 +147,37 @@ def plot_erds_topomap(erds_events, y,  info, band, events_dict, vmin, vmax, ch_n
             im,cn = plt_topomap(array_plot, pos=info, axes = axs[event_id], show = False, vmin = vmin, vmax = vmax, show_names = True, names = ch_names);
             time_txt = "{}-{}s".format(8, 36)
             axs[event_id].set_title("{} {}".format(event_name, band), fontsize=10)
-    #axs.set_title("{}".format(band))
     cbar = plt.colorbar(im)  
     cbar.ax.tick_params(labelsize=6)
     axs[3].axis('off')
+
+
+def get_channels_stats(erds,y, events_dict, ch_names):
+    #describe
+    for event_name, ind_event in events_dict.items():
+            df = pd.DataFrame([])
+            ind_obs_event = np.where(y==ind_event)[0]
+            for ch in range(erds.shape[1]):
+                obs_events = erds[ind_obs_event,ch]
+                df[ch_names[ch]]= obs_events
+            print(event_name)
+            print(df.describe())
+    #boxplot    
+    fig, axs = plt.subplots(nrows=8, ncols=8)    
+    ind_ch = 0
+    for ch in range(erds.shape[1]): 
+         df = pd.DataFrame([])
+         for event_name, ind_event in events_dict.items():
+             ind_obs_event = np.where(y==ind_event)[0]
+             obs_events = erds[ind_obs_event,ch]
+             df[event_name]= pd.Series(obs_events)
+         col = int(np.floor(ch/axs.shape[0]))
+         row = np.mod(ch,axs.shape[0])
+         df.boxplot(ax=axs[row,col])
+         axs[row,col].set_title(ch_names[ch], fontsize=7, fontweight='bold')
+         axs[row,col].tick_params(labelsize=7)
+    ind_ch+=1
+
+    
+    
+    
