@@ -42,7 +42,7 @@ def eeg_preprocess(raw, channels_list = None, plot_flag = False):
     filt_raw.notch_filter(np.arange(60, 241, 60), verbose=False)
     filt_csd = mne.preprocessing.compute_current_source_density(filt_raw)
     if plot_flag ==True:
-        filt_csd.plot(duration=2, n_channels=20, remove_dc=False);
+        filt_csd.plot(duration=2960, start = 316,n_channels=20, remove_dc=False);
         filt_csd.plot_psd(fmax=100);
     return filt_csd
 
