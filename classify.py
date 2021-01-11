@@ -19,7 +19,7 @@ import seaborn as sns
 def train_knn(erds, y, events_dict):
     erds_scaled, scaler = scale_data(erds)
     k_vizinhos = 10
-    model = KNeighborsClassifier(n_neighbors=k_vizinhos,metric="manhattan")
+    model = KNeighborsClassifier(n_neighbors=k_vizinhos)
     model.fit(erds_scaled, y)
     acc = {}
     for event_name, event_id in events_dict.items():

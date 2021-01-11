@@ -75,19 +75,20 @@ def smooth_signal(erds, fs, new_freq, time_vec, plot=False):
         plt.show()
     return erds_smooth, axis_smooth 
 
-def extract_erds_signal(signal, time_vec, ref, fs, new_freq):
+def extract_erds_signal(signal, time_vec, ref, fs, new_freq, base_power):
     # extract erds. Signal must be previously filtered in the desired band
     power_signal = np.power(signal,2)
-    smooth_power_signal, smooth_time = smooth_signal(power_signal, fs, new_freq, time_vec, plot=False)
+    #smooth_power_signal, smooth_time = smooth_signal(power_signal, fs, new_freq, time_vec, plot=False)
     smooth_array = None
     for ch in range(signal.shape[0]):
-        smooth_power, smooth_time = smooth_signal(signal[ch,:].reshape([1,signal.shape[-1]]), fs, new_freq, time_vec, plot=False)
+        smooth_power, smooth_time = smooth_signal(power_signal[ch,:].reshape([1,signal.shape[-1]]), fs, new_freq, time_vec, plot=False)
         if smooth_array is not None:
             smooth_array = np.concatenate([smooth_array, smooth_power.reshape([1, smooth_power.shape[0]])], axis = 0)
         else: smooth_array = smooth_power.reshape([1, smooth_power.shape[0]])
     ref = ref.reshape([ref.shape[0],1])
     erds = (smooth_array - ref)/ref
-    return erds
+    rel_power = smooth_array/base_power.reshape([base_power.shape[0],1])
+    return erds, rel_power
 
 def extract_erds_epochs(epochs, time_vec, ref, fs, new_freq, lims_time_event):
     # extract erds. Signal must be previously filtered in the desired band
@@ -107,6 +108,23 @@ def extract_erds_epochs(epochs, time_vec, ref, fs, new_freq, lims_time_event):
     erds = (smooth_array - ref)/ref
     return erds
 
+def extract_base_power(epochs,filt_freqs, events_intv):
+    epochs.filter(filt_freqs[0], filt_freqs[1])
+    selection = epochs.selection
+    base_power = None
+    for ind_ep in range(selection.size): # acha a potencia de cada epoca separadamente(devido aos diferentes tempos de corte)
+        ep = epochs[ind_ep]
+        ep_event_id = ep.event_id
+        ep_event_id = ep_event_id[next(iter(ep_event_id))]
+        ep.crop(events_intv[ep_event_id,0], events_intv[ep_event_id,1]) 
+        ep_event_data = np.power(ep.get_data(),2)
+        ep_base_power = ep_event_data.mean(axis=2) #media no tempo (shape (63,1))
+        if base_power is not None:
+            base_power = np.concatenate([base_power,ep_base_power.reshape([ep_base_power.shape[-1],1])], axis=1)#each epoch in a column
+        else: base_power = ep_base_power.reshape([ep_base_power.shape[-1],1])
+    val_base_power = base_power.mean(axis=1)  # media ao longo das epocas
+
+    return val_base_power
 
 def extract_ref(epochs, time_vec, lims_time_event, fs, new_freq):
     epochs_event_data = np.power(epochs.get_data(),2)
@@ -163,7 +181,7 @@ def get_channels_stats(erds,y, events_dict, ch_names):
             print(event_name)
             print(df.describe())
     #boxplot    
-    fig, axs = plt.subplots(nrows=8, ncols=8)    
+    fig, axs = plt.subplots(nrows=7, ncols=7)    
     ind_ch = 0
     for ch in range(erds.shape[1]): 
          df = pd.DataFrame([])

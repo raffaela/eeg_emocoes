@@ -8,7 +8,7 @@ import os
 import numpy as np
 import mne
 from utils import read_eeginfo, eeg_preprocess, get_events_sequence
-from utils import extract_erds_epochs, extract_ref
+from utils import extract_erds_epochs, extract_ref, extract_base_power
 from utils import extract_erds_signal, plot_erds_topomap, get_channels_stats
 import config
 from classify import train_knn, test_model, train_randomforest, report_average, print_confusion_matrix
@@ -30,29 +30,40 @@ def get_average_train_acc(train_acc_knn,train_acc_rf):
     dict_train_rf['angustia']=sum(item['angustia'] for item in train_acc_rf)/divisor
     return dict_train_knn, dict_train_rf
 
-def extract_ERDS_signal(epochs_test, ref_train):#ref_train is an array (for a given band)
+#def extract_relative_power(epochs_test, ref_train):#ref_train is an array (for a given band)
+    
+
+
+
+
+def extract_ERDS_signal(epochs_test, ref_train, base_power=None):#ref_train is an array (for a given band)
     fs = epochs.info['sfreq']
     selection = epochs_test.selection
     y_test = None
     erds_test = None
+    rpower_test = None
+    print("ref shape ", ref_train.shape)
     for ind_ep in range(selection.size):
         ep_test = epochs_test[ind_ep]
         ep_event_id = ep_test.event_id
         ep_event_id = ep_event_id[next(iter(ep_event_id))]
-        ep_test = ep_test.crop(config.events_intv[ep_event_id,0], config.events_intv[ep_event_id,1])
+        ep_test.crop(config.events_intv[ep_event_id,0], config.events_intv[ep_event_id,1])
         signal_ep = ep_test.get_data()
         signal_ep = signal_ep.reshape([signal_ep.shape[1], signal_ep.shape[2]])
         time_vec_ep = np.arange(0, signal_ep.size/fs,signal_ep.size/(signal_ep.size*fs))
-        erds_ep= extract_erds_signal(signal_ep, time_vec_ep, ref_train, fs, config.new_freq)
+        erds_ep, rpower_ep = extract_erds_signal(signal_ep, time_vec_ep, ref_train, fs, config.new_freq, base_power)
+        
         y_ep = np.repeat(ep_event_id, erds_ep.shape[1])
             
         if erds_test is not None:
             erds_test = np.concatenate([erds_test, erds_ep], axis=1)
+            rpower_test = np.concatenate([rpower_test, rpower_ep], axis=1)
             y_test = np.concatenate([y_test, y_ep])
         else: 
             erds_test = erds_ep
+            rpower_test = rpower_ep
             y_test = y_ep
-    return erds_test, y_test
+    return erds_test, y_test, rpower_test
 
 def extract_ERDS(epochs, freq_bands = config.freq_bands):
     # extract ERDS 
@@ -117,18 +128,17 @@ def run_kfold(folds, epochs, array_split, pos, freq_bands=config.train_band, plo
         epochs_train = epochs[array_train]
         epochs_test = epochs[array_test]
 
-        # extract ERDS from test epochs
+        # extract base power for relative power calc
+        base_power = extract_base_power(epochs_train.copy(), config.base_freq, config.events_intv)
+       
+        # extract ERDS from train epochs
         lims_freq = freq_bands[band]
         epochs_train.filter(lims_freq[0], lims_freq[1],verbose=False)
         ref_train = extract_ref(epochs_train['neutro'].copy(), time_vec, config.lims_time_neutro, fs, config.new_freq) 
-        erds_train,y_train = extract_ERDS_signal(epochs_train.copy(), ref_train)
-
+        erds_train,y_train, rpower_train = extract_ERDS_signal(epochs_train.copy(), ref_train, base_power)
+             
         
-        # plot mean ERDS topomaps 
-        if plot_flag == True:
-            plot_erds_topomap(erds_train,y_train, pos, band, config.events_id, -0.5, 0.5, ch_names)
-        
-        #Apply PCA
+        #Transpose to enter classifier
         erds_train = erds_train.T
         
         # train model
@@ -140,15 +150,9 @@ def run_kfold(folds, epochs, array_split, pos, freq_bands=config.train_band, plo
 
         # extract ERDS from test epochs
         lims_freq = freq_bands[band]
-        
         epochs_test.filter(lims_freq[0], lims_freq[1],verbose=False)
-        
-        erds_test,y_test = extract_ERDS_signal(epochs_test.copy(), ref_train)
-
+        erds_test,y_test, rpower_test = extract_ERDS_signal(epochs_test.copy(), ref_train, base_power)
         erds_test = erds_test.T    
-
-        #Get statistics (for train data)        
-        get_channels_stats(erds_train,y_train, config.events_id, ch_names)
         
         # test model
         report_knn, cf_matrix_knn = test_model(erds_test, y_test, model_knn, config.events_id, scaler_knn)
@@ -192,7 +196,10 @@ if __name__ == '__main__':
     # transform data to Epochs
     epochs = mne.Epochs(raw_filt.copy(), array_events, event_id=config.events_id, 
     tmin=config.tmin_epoch, tmax=config.tmax_epoch, preload=True, baseline=None)
-    
+            
+    # #Get statistics (for train data)        
+    # get_channels_stats(erds_train.T,y_train, config.events_id, ch_names)
+    # get_channels_stats(rpower_train.T,y_train, config.events_id, ch_names)
     # # # Exploratory Data Analysis
     # erds_dict, y_dict, ref_dict = extract_ERDS(epochs.copy())
     # # band = 'gama'
