@@ -1,9 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Jan  8 16:44:25 2021
-
-@author: Raffaela
-"""
+# Authors: Raffaela Cunha <raffaelacunha@gmail.com>
 
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
@@ -15,7 +10,6 @@ from functools import reduce
 import pandas as pd
 import seaborn as sns
 
-#erds_all = erds.reshape([erds_array_all.shape[2],erds_array_all.shape[0], erds_array_all.shape[1]])
 def train_knn(erds, y, events_dict):
     erds_scaled, scaler = scale_data(erds)
     k_vizinhos = 10
@@ -27,7 +21,8 @@ def train_knn(erds, y, events_dict):
         erds_event_test =  erds[ind_obs_event,:]
         predicted = model.predict(erds_event_test) 
         acc_evento = len(np.where(np.array(predicted)==event_id)[0])/len(predicted)
-        print("Train acc {}: {}".format(event_name, acc_evento))
+        print("Train acc {}: {}".format(event_name, acc_evento)) 
+        print("Score", model.score(erds, y))
         acc[event_name]=acc_evento
     return model, scaler, acc
 
@@ -41,6 +36,7 @@ def train_randomforest(erds, y, events_dict):
         predicted = model.predict(erds_event_test)
         acc_evento = len(np.where(np.array(predicted)==event_id)[0])/len(predicted)
         print("Train acc {}: {}".format(event_name, acc_evento))
+        print("Score", model.score(erds, y))
         acc[event_name]=acc_evento
     return model, acc
 
@@ -52,12 +48,9 @@ def test_model(erds_test, y_test, model, events_dict, scaler=None):
     display_labels = ['neutro','ternura','angustia']
     report = classification_report(y_test,predicted, labels=labels, target_names = display_labels)
     print(report)
-    plot_confusion_matrix(model, erds_test, y_test, labels=labels, display_labels = display_labels)  
+    #plot_confusion_matrix(model, erds_test, y_test, labels=labels, display_labels = display_labels)  
     cf_matrix = confusion_matrix(y_test,predicted, labels = labels)
     return report, cf_matrix
-
-
-
 
 
 def report_average(reports):
@@ -105,15 +98,18 @@ def print_confusion_matrix(confusion_matrix, class_names, figsize = (10,7), font
         confusion_matrix, index=class_names, columns=class_names, 
     )
     fig = plt.figure(figsize=figsize)
-    divisor = np.sum(df_cm,axis=1).to_numpy()
-    divisor = divisor.reshape([df_cm.shape[0],1])
-
+    # divisor = np.sum(df_cm,axis=1).to_numpy()
+    # divisor = divisor.reshape([df_cm.shape[0],1])
+    sns.set(font_scale=1.5)
+   
     try:
-        heatmap = sns.heatmap(df_cm/divisor, annot=True, fmt=".0%")
+        heatmap = sns.heatmap(df_cm, annot=True, fmt="d")
     except ValueError:
         raise ValueError("Confusion matrix values must be integers.")
     heatmap.yaxis.set_ticklabels(heatmap.yaxis.get_ticklabels(), rotation=0, ha='right', fontsize=fontsize)
     heatmap.xaxis.set_ticklabels(heatmap.xaxis.get_ticklabels(), rotation=45, ha='right', fontsize=fontsize)
+     
+    plt.tick_params(axis='both', which='major', labelsize=14) 
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
     return fig

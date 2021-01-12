@@ -1,9 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Jan  8 01:43:54 2021
-
-@author: Raffaela
-"""
+# Authors: Raffaela Cunha <raffaelacunha@gmail.com>
 
 import mne
 import numpy as np
@@ -129,7 +124,6 @@ def extract_base_power(epochs,filt_freqs, events_intv):
 def extract_ref(epochs, time_vec, lims_time_event, fs, new_freq):
     epochs_event_data = np.power(epochs.get_data(),2)
     epochs_mean = epochs_event_data.mean(axis=0)
-    #ref = epochs_mean[:,time_ind[0]:time_ind[1]].mean(axis=1)
     # acrescentado smooth na referencia
     smooth_array = None
     for ch in range(epochs_mean.shape[0]):
@@ -150,7 +144,6 @@ def extract_ref(epochs, time_vec, lims_time_event, fs, new_freq):
         if ind_outlier.size!=0:
             ref_ch = np.delete(ref_ch,ind_outlier).mean()
         ref = np.concatenate([ref,np.array([ref_ch.mean()])])
-    #ref = smooth_array.mean(axis=1)
     return ref
 
 
@@ -181,7 +174,7 @@ def get_channels_stats(erds,y, events_dict, ch_names):
             print(event_name)
             print(df.describe())
     #boxplot    
-    fig, axs = plt.subplots(nrows=7, ncols=7)    
+    fig, axs = plt.subplots(nrows=8, ncols=8)    
     ind_ch = 0
     for ch in range(erds.shape[1]): 
          df = pd.DataFrame([])

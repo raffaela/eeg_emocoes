@@ -1,9 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Jan  8 02:01:56 2021
+# Authors: Raffaela Cunha <raffaelacunha@gmail.com>
 
-@author: Raffaela
-"""
 import os
 import numpy as np
 import mne
@@ -30,11 +26,6 @@ def get_average_train_acc(train_acc_knn,train_acc_rf):
     dict_train_rf['angustia']=sum(item['angustia'] for item in train_acc_rf)/divisor
     return dict_train_knn, dict_train_rf
 
-#def extract_relative_power(epochs_test, ref_train):#ref_train is an array (for a given band)
-    
-
-
-
 
 def extract_ERDS_signal(epochs_test, ref_train, base_power=None):#ref_train is an array (for a given band)
     fs = epochs.info['sfreq']
@@ -42,7 +33,6 @@ def extract_ERDS_signal(epochs_test, ref_train, base_power=None):#ref_train is a
     y_test = None
     erds_test = None
     rpower_test = None
-    print("ref shape ", ref_train.shape)
     for ind_ep in range(selection.size):
         ep_test = epochs_test[ind_ep]
         ep_event_id = ep_test.event_id
@@ -131,13 +121,11 @@ def run_kfold(folds, epochs, array_split, pos, freq_bands=config.train_band, plo
         # extract base power for relative power calc
         base_power = extract_base_power(epochs_train.copy(), config.base_freq, config.events_intv)
        
-        # extract ERDS from train epochs
+        # extract ERDS and relative power from train epochs
         lims_freq = freq_bands[band]
         epochs_train.filter(lims_freq[0], lims_freq[1],verbose=False)
         ref_train = extract_ref(epochs_train['neutro'].copy(), time_vec, config.lims_time_neutro, fs, config.new_freq) 
-        erds_train,y_train, rpower_train = extract_ERDS_signal(epochs_train.copy(), ref_train, base_power)
-             
-        
+        erds_train,y_train, rpower_train = extract_ERDS_signal(epochs_train.copy(), ref_train, base_power) 
         #Transpose to enter classifier
         erds_train = erds_train.T
         
@@ -152,6 +140,7 @@ def run_kfold(folds, epochs, array_split, pos, freq_bands=config.train_band, plo
         lims_freq = freq_bands[band]
         epochs_test.filter(lims_freq[0], lims_freq[1],verbose=False)
         erds_test,y_test, rpower_test = extract_ERDS_signal(epochs_test.copy(), ref_train, base_power)
+        # Transpose to enter classifier
         erds_test = erds_test.T    
         
         # test model
@@ -188,27 +177,42 @@ if __name__ == '__main__':
     raw, time_events = read_eeginfo(eeg_filepath, marc_filepath)
     raw_filt = eeg_preprocess(raw)
     array_events = get_events_sequence(config.seq_events, config.num_sections , time_events)
-    #channels_train = ['Oz','O1','O2']
-    channels_drop = ['F7','F8','FC2','Pz','AF4','F6','AF7','AF8','FT7','C4','CP4','FT8', 'AF3','F1','Fz','F2']
-    #raw_filt.pick_channels(channels_train)
-    raw_filt.drop_channels(channels_drop)
+    channels_pick = ['Fp2','O2','T7','T8','Oz','FC6','CP5','TP9','TP10','FC4','P5','TP7','TP8','FT9','FT10','Fpz']
+    #channels_drop = ['F7','F8','FC2','Pz','AF4','F6','AF7','AF8','FT7','C4','CP4','FT8', 'AF3','F1','Fz','F2']
+    channels_drop = ['Fpz','FT7','C6','FC5','T8','FC6','Fp1','Fp2','F4','C3','C4','FT9', 'AF7','AF8','Fz','F2','F1']
+    raw_filt.pick_channels(channels_pick)
+    #raw_filt.drop_channels(channels_drop)
     ch_names = raw_filt.info['ch_names']
     # transform data to Epochs
     epochs = mne.Epochs(raw_filt.copy(), array_events, event_id=config.events_id, 
     tmin=config.tmin_epoch, tmax=config.tmax_epoch, preload=True, baseline=None)
-            
+
+
+    # # Exploratory analysis of features of the whole signal            
+    # band = 'beta_gama'
+    # fs = epochs.info['sfreq']
+    # base_power = extract_base_power(epochs.copy(), config.base_freq, config.events_intv)
+    # lims_freq = config.freq_bands[band]
+    # epochs_band = epochs.copy()
+    # epochs_band.filter(lims_freq[0], lims_freq[1],verbose=False)
+    # ref_band = extract_ref(epochs_band['neutro'].copy(), epochs.times, config.lims_time_neutro, fs, config.new_freq) 
+    # erds_band,y_band, rpower_band = extract_ERDS_signal(epochs_band.copy(), ref_band, base_power) 
+   
+    # model_fullrf, scaler_fullrf, acc_fullrf = train_randomforest(erds_band.T, y_band, config.events_id)
+    
     # #Get statistics (for train data)        
-    # get_channels_stats(erds_train.T,y_train, config.events_id, ch_names)
-    # get_channels_stats(rpower_train.T,y_train, config.events_id, ch_names)
-    # # # Exploratory Data Analysis
-    # erds_dict, y_dict, ref_dict = extract_ERDS(epochs.copy())
-    # # band = 'gama'
-    # # get_channels_stats(erds_dict[band].T,y_dict[band], config.events_id, ch_names)
-    # # np.savez(erds_file, **erds_dict)
-    # # np.savez(y_file,**y_dict)
-    # # np.savez(ref_file,**ref_dict)
-    # # np.savez("epochs.npz", epochs)
-    # # ch_names = epochs.info['ch_names']
+    # get_channels_stats(erds_band.T,y_band, config.events_id, ch_names)
+    # get_channels_stats(rpower_band.T,y_band, config.events_id, ch_names)
+ 
+    # # Exploratory Data Analysis 0
+    #erds_dict, y_dict, ref_dict = extract_ERDS(epochs.copy())
+    # band = 'gama'
+    # get_channels_stats(erds_dict[band].T,y_dict[band], config.events_id, ch_names)
+    # np.savez(erds_file, **erds_dict)
+    # np.savez(y_file,**y_dict)
+    # np.savez(ref_file,**ref_dict)
+    # np.savez("epochs.npz", epochs)
+    # ch_names = epochs.info['ch_names']
     # for band, lims in config.freq_bands.items(): # frequency band loop
     #     plot_erds_topomap(erds_dict[band],y_dict[band], raw_filt.info, band, config.events_id, -0.5, 0.5, ch_names)
     
