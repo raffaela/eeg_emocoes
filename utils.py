@@ -70,10 +70,38 @@ def smooth_signal(erds, fs, new_freq, time_vec, plot=False):
         plt.show()
     return erds_smooth, axis_smooth 
 
+def extract_features_signal(epochs_test, ref_train, events_intv, new_freq, base_power=None):#ref_train is an array (for a given band)
+    fs = epochs_test.info['sfreq']
+    selection = epochs_test.selection
+    y_test = None
+    erds_test = None
+    rpower_test = None
+    for ind_ep in range(selection.size):
+        ep_test = epochs_test[ind_ep]
+        ep_event_id = ep_test.event_id
+        ep_event_id = ep_event_id[next(iter(ep_event_id))]
+        ep_test.crop(events_intv[ep_event_id,0],events_intv[ep_event_id,1])
+        signal_ep = ep_test.get_data()
+        signal_ep = signal_ep.reshape([signal_ep.shape[1], signal_ep.shape[2]])
+        time_vec_ep = np.arange(0, signal_ep.size/fs,signal_ep.size/(signal_ep.size*fs))
+        erds_ep, rpower_ep = extract_erds_signal(signal_ep, time_vec_ep, ref_train, fs, new_freq, base_power)
+        
+        y_ep = np.repeat(ep_event_id, erds_ep.shape[1])
+            
+        if erds_test is not None:
+            erds_test = np.concatenate([erds_test, erds_ep], axis=1)
+            rpower_test = np.concatenate([rpower_test, rpower_ep], axis=1)
+            y_test = np.concatenate([y_test, y_ep])
+        else: 
+            erds_test = erds_ep
+            rpower_test = rpower_ep
+            y_test = y_ep
+    return erds_test, y_test, rpower_test
+
+
 def extract_erds_signal(signal, time_vec, ref, fs, new_freq, base_power):
     # extract erds. Signal must be previously filtered in the desired band
     power_signal = np.power(signal,2)
-    #smooth_power_signal, smooth_time = smooth_signal(power_signal, fs, new_freq, time_vec, plot=False)
     smooth_array = None
     for ch in range(signal.shape[0]):
         smooth_power, smooth_time = smooth_signal(power_signal[ch,:].reshape([1,signal.shape[-1]]), fs, new_freq, time_vec, plot=False)
@@ -161,8 +189,8 @@ def plot_erds_topomap(erds_events, y,  info, band, events_dict, vmin, vmax, ch_n
     cbar = plt.colorbar(im)  
     cbar.ax.tick_params(labelsize=6)
     axs[3].axis('off')
-
-
+    plt.show()
+    
 def get_channels_stats(erds,y, events_dict, ch_names):
     #describe
     for event_name, ind_event in events_dict.items():
@@ -174,7 +202,9 @@ def get_channels_stats(erds,y, events_dict, ch_names):
             print(event_name)
             print(df.describe())
     #boxplot    
-    fig, axs = plt.subplots(nrows=8, ncols=8)    
+    n_rows = int(np.ceil(np.sqrt(len(ch_names))))
+    n_cols = n_rows
+    fig, axs = plt.subplots(nrows=n_rows, ncols=n_cols)    
     ind_ch = 0
     for ch in range(erds.shape[1]): 
          df = pd.DataFrame([])
@@ -188,6 +218,7 @@ def get_channels_stats(erds,y, events_dict, ch_names):
          axs[row,col].set_title(ch_names[ch], fontsize=7, fontweight='bold')
          axs[row,col].tick_params(labelsize=7)
     ind_ch+=1
+    plt.show()
 
     
     

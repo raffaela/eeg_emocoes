@@ -26,7 +26,7 @@ def train_knn(erds, y, events_dict):
         acc[event_name]=acc_evento
     return model, scaler, acc
 
-def train_randomforest(erds, y, events_dict):
+def train_randomforest(erds, y, events_dict, importance=False, ch_names = None):
     model = RandomForestClassifier(random_state=0)
     model.fit(erds, y)
     acc = {}
@@ -38,6 +38,8 @@ def train_randomforest(erds, y, events_dict):
         print("Train acc {}: {}".format(event_name, acc_evento))
         print("Score", model.score(erds, y))
         acc[event_name]=acc_evento
+    if importance == True:
+        plot_importance(model, ch_names)
     return model, acc
 
 def test_model(erds_test, y_test, model, events_dict, scaler=None):
@@ -52,7 +54,18 @@ def test_model(erds_test, y_test, model, events_dict, scaler=None):
     cf_matrix = confusion_matrix(y_test,predicted, labels = labels)
     return report, cf_matrix
 
-
+def plot_importance(model, x_labels):
+    importance = model.feature_importances_
+    fig, ax = plt.subplots()
+    ax.bar([x for x in range(len(importance))], importance)
+    ax.set_xticklabels(x_labels, rotation = 45)
+    xticks_loc = np.arange(0,len(x_labels))
+    ax.set_xticks(xticks_loc)
+    ax.plot(xticks_loc,np.repeat(np.mean(importance),xticks_loc.size),color='r')
+    ax.set_ylabel("Importance")
+    plt.show()
+    
+    
 def report_average(reports):
     report_list = list()
     for report in reports:
@@ -110,6 +123,6 @@ def print_confusion_matrix(confusion_matrix, class_names, figsize = (10,7), font
     heatmap.xaxis.set_ticklabels(heatmap.xaxis.get_ticklabels(), rotation=45, ha='right', fontsize=fontsize)
      
     plt.tick_params(axis='both', which='major', labelsize=14) 
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
+    plt.ylabel('Valor Verdadeiro')
+    plt.xlabel('Valor Predito')
     return fig
