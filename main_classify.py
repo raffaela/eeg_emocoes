@@ -12,6 +12,8 @@ from collections import deque
 import pandas as pd
 from excel_write import append_df_to_excel
 import matplotlib.pyplot as plt
+from datetime import datetime as dt
+import yaml
 
 
 def get_average_train_acc(train_acc_knn,train_acc_rf):
@@ -27,7 +29,7 @@ def get_average_train_acc(train_acc_knn,train_acc_rf):
     return dict_train_knn, dict_train_rf
 
 
-def run_kfold(folds, epochs, array_split, pos, band=config.classify_band, freq_bands=config.freq_bands, plot_flag = False):
+def run_kfold(folds, epochs, array_split, pos, band=config.classify_band, freq_bands=config.freq_bands, k_vizinhos=10, plot_flag = False):
     fs = epochs.info['sfreq']
     ch_names = epochs.info['ch_names']
     time_vec = epochs.times
@@ -64,7 +66,7 @@ def run_kfold(folds, epochs, array_split, pos, band=config.classify_band, freq_b
         erds_train = erds_train.T
         
         # train model
-        model_knn, scaler_knn, acc_knn = train_knn(erds_train, y_train, config.events_id)
+        model_knn, scaler_knn, acc_knn = train_knn(erds_train, y_train, config.events_id, k_vizinhos)
         model_rf, acc_rf = train_randomforest(erds_train, y_train, config.events_id)
         
         train_acc_knn.append(acc_knn)
@@ -100,7 +102,8 @@ def run_kfold(folds, epochs, array_split, pos, band=config.classify_band, freq_b
         
 
 if __name__ == '__main__':
-
+    
+    os.mkdir(config.results_folder)
     raw, time_events = read_eeginfo(config.eeg_filepath, config.marc_filepath)
     raw_filt = eeg_preprocess(raw)
     array_events = get_events_sequence(config.seq_events, config.num_sections , time_events)
@@ -120,7 +123,7 @@ if __name__ == '__main__':
     epochs_ind = np.array(epochs_ind)
     array_split = np.split(epochs_ind, k)
     folds = np.arange(k)
-    report_knn_av, report_rf_av, cf_matrices_knn, cf_matrices_rf, dict_train_knn, dict_train_rf = run_kfold(folds, epochs, array_split, raw_filt.info, plot_flag = False)
+    report_knn_av, report_rf_av, cf_matrices_knn, cf_matrices_rf, dict_train_knn, dict_train_rf = run_kfold(folds, epochs, array_split, raw_filt.info, plot_flag = False, k_vizinhos = config.k_neighbours)
 
     cf_fig_knn = print_confusion_matrix(cf_matrices_knn, ['neutro','ternura','angustia'])
     cf_fig_rf = print_confusion_matrix(cf_matrices_rf, ['neutro','ternura','angustia'])
@@ -144,4 +147,9 @@ if __name__ == '__main__':
     append_df_to_excel(xlsx_file , df_train_acc_knn, sheet_name='train_acc_knn')
     append_df_to_excel(xlsx_file , df_train_acc_rf, sheet_name='train_acc_rf')
     
-    
+    dict_config = config.user_config
+    dict_config['versao'] = config.current_version
+    dict_config['data'] = dt.now().strftime('%Y-%m-%d %H:%M:%S')
+    config_file_output = os.path.sep.join([config.results_folder,'user_config.yaml'])
+    with open(config_file_output, 'w') as f:
+        yaml.dump(dict_config, f)

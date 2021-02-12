@@ -10,9 +10,11 @@ from functools import reduce
 import pandas as pd
 import seaborn as sns
 
-def train_knn(erds, y, events_dict):
+def train_knn(erds, y, events_dict, k_vizinhos=10):
+    print("k")
+    print(k_vizinhos)
     erds_scaled, scaler = scale_data(erds)
-    k_vizinhos = 10
+    #k_vizinhos = 10
     model = KNeighborsClassifier(n_neighbors=k_vizinhos)
     model.fit(erds_scaled, y)
     acc = {}
@@ -46,7 +48,7 @@ def test_model(erds_test, y_test, model, events_dict, scaler=None):
     if scaler is not None:
         erds_test = scaler.transform(erds_test)
     predicted  = model.predict(erds_test).astype(int)
-    labels = [0,1,2]
+    labels = list(np.unique(y_test))
     display_labels = ['neutro','ternura','angustia']
     report = classification_report(y_test,predicted, labels=labels, target_names = display_labels)
     print(report)

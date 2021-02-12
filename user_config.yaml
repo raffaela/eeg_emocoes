@@ -1,0 +1,28 @@
+eeg_filepath: dados\\SUBJ002\\SUBJ0002.vhdr
+marc_filepath: dados\\SUBJ002\\Marcsubject2.mat
+classify_band: beta_gama
+channels_pick:
+  - Fp2
+  - O2
+  - T7
+  - T8
+  - Oz
+  - FC6
+  - CP5
+  - TP9
+  - TP10
+  - FC4
+  - P5
+  - TP7
+  - TP8
+  - FT9
+  - FT10
+  - Fpz
+lims_time_neutro:
+  - 5
+  - 7
+lims_time_event: 
+  - 8
+  - 36
+  
+k_neighbours: 10
